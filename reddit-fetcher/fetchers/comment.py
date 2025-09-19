@@ -53,7 +53,7 @@ class CommentFetcher:
     def fetch_submission_comments(self,
                                  submission: Submission,
                                  include_deleted: bool = False,
-                                 flatten: bool = True) -> List[Dict[str, Any]]:
+                                 flatten: bool = True) -> List[Dict[CommentField, Any]]:
         """
         Fetch all comments from a submission.
 
@@ -92,7 +92,7 @@ class CommentFetcher:
 
     def fetch_submission_comments_stream(self,
                                        submission: Submission,
-                                       include_deleted: bool = False) -> Generator[Dict[str, Any], None, None]:
+                                       include_deleted: bool = False) -> Generator[Dict[CommentField, Any], None, None]:
         """
         Stream comments from a submission as they're processed.
 
@@ -145,7 +145,7 @@ class CommentFetcher:
     def _extract_comments_flat(self,
                               comment_forest,
                               submission_id: str,
-                              include_deleted: bool = False) -> List[Dict[str, Any]]:
+                              include_deleted: bool = False) -> List[Dict[CommentField, Any]]:
         """
         Extract comments as a flat list.
 
@@ -178,7 +178,7 @@ class CommentFetcher:
                               submission_id: str,
                               parent_id: Optional[str],
                               depth: int,
-                              include_deleted: bool = False) -> List[Dict[str, Any]]:
+                              include_deleted: bool = False) -> List[Dict[CommentField, Any]]:
         """
         Extract comments preserving tree structure.
 
@@ -230,7 +230,7 @@ class CommentFetcher:
                         submission_id: str,
                         parent_id: Optional[str],
                         depth: int,
-                        include_deleted: bool = False) -> Generator[Dict[str, Any], None, None]:
+                        include_deleted: bool = False) -> Generator[Dict[CommentField, Any], None, None]:
         """
         Stream comments as they're processed.
 
@@ -275,7 +275,7 @@ class CommentFetcher:
                         comment: Comment,
                         submission_id: str,
                         parent_id: Optional[str] = None,
-                        depth: int = 0) -> Dict[str, Any]:
+                        depth: int = 0) -> Dict[CommentField, Any]:
         """
         Process a single comment into a dictionary.
 
@@ -325,7 +325,7 @@ class CommentFetcher:
             }
         except Exception as e:
             logger.error(f"Error processing comment {comment.id}: {e}")
-            return None
+            raise e
 
     def _get_comment_depth(self, comment: Comment) -> int:
         """
@@ -373,7 +373,7 @@ class CommentFetcher:
         """
         return comment.body == CommentBodyStatus.REMOVED.value
 
-    def get_comment_stats(self, comments: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def get_comment_stats(self, comments: List[Dict[CommentField, Any]]) -> Dict[CommentStatField, Any]:
         """
         Calculate statistics for a collection of comments.
 
