@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:praw.readthedocs.io)",
+      "Bash(mkdir:*)",
+      "Bash(python -m pytest tests/test_comment.py -v)",
+      "Bash(python3 -m pytest tests/test_comment.py -v)",
+      "Bash(python3:*)",
+      "Bash(timeout 5 python3 -m pytest:*)",
+      "Bash(echo:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

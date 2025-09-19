@@ -1,0 +1,522 @@
+-- Reddit Data PostgreSQL Schema
+-- Generated from PRAW (Python Reddit API Wrapper) data models
+-- This schema captures all major Reddit entities and their relationships
+
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For text search optimization
+
+-- Create schema
+CREATE SCHEMA IF NOT EXISTS reddit;
+SET search_path TO reddit, public;
+
+-- =====================================================
+-- CORE TABLES
+-- =====================================================
+
+-- Redditors (Reddit Users)
+CREATE TABLE IF NOT EXISTS redditors (
+    id VARCHAR(10) PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    created_utc TIMESTAMP NOT NULL,
+    link_karma INTEGER DEFAULT 0,
+    comment_karma INTEGER DEFAULT 0,
+    total_karma INTEGER GENERATED ALWAYS AS (link_karma + comment_karma) STORED,
+    icon_img TEXT,
+    is_employee BOOLEAN DEFAULT FALSE,
+    is_mod BOOLEAN DEFAULT FALSE,
+    is_gold BOOLEAN DEFAULT FALSE,
+    is_suspended BOOLEAN DEFAULT FALSE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    has_verified_email BOOLEAN DEFAULT FALSE,
+    accepts_followers BOOLEAN DEFAULT TRUE,
+    -- Store additional dynamic attributes from API
+    extra_attributes JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Subreddits
+CREATE TABLE IF NOT EXISTS subreddits (
+    id VARCHAR(10) PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    display_name VARCHAR(50) NOT NULL,
+    display_name_prefixed VARCHAR(52) GENERATED ALWAYS AS ('r/' || display_name) STORED,
+    created_utc TIMESTAMP NOT NULL,
+    subscribers INTEGER DEFAULT 0,
+    accounts_active INTEGER,
+    active_user_count INTEGER,
+
+    -- Description fields
+    title TEXT,
+    description TEXT,
+    description_html TEXT,
+    public_description TEXT,
+    public_description_html TEXT,
+    submit_text TEXT,
+    submit_text_html TEXT,
+
+    -- Settings and flags
+    over18 BOOLEAN DEFAULT FALSE,
+    spoilers_enabled BOOLEAN DEFAULT FALSE,
+    quarantine BOOLEAN DEFAULT FALSE,
+    hide_ads BOOLEAN DEFAULT FALSE,
+    allow_videos BOOLEAN DEFAULT TRUE,
+    allow_images BOOLEAN DEFAULT TRUE,
+    allow_polls BOOLEAN DEFAULT TRUE,
+    allow_predictions BOOLEAN DEFAULT FALSE,
+
+    -- Subreddit type and visibility
+    subreddit_type VARCHAR(20) DEFAULT 'public', -- public, private, restricted, archived
+    submission_type VARCHAR(20) DEFAULT 'any', -- any, link, self
+
+    -- Flair settings
+    can_assign_link_flair BOOLEAN DEFAULT FALSE,
+    can_assign_user_flair BOOLEAN DEFAULT FALSE,
+    link_flair_enabled BOOLEAN DEFAULT FALSE,
+    user_flair_enabled BOOLEAN DEFAULT FALSE,
+
+    -- Wiki settings
+    wiki_enabled BOOLEAN DEFAULT TRUE,
+
+    -- URLs
+    banner_img TEXT,
+    header_img TEXT,
+    icon_img TEXT,
+
+    -- Store additional dynamic attributes
+    extra_attributes JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Submissions (Posts)
+CREATE TABLE IF NOT EXISTS submissions (
+    id VARCHAR(10) PRIMARY KEY,
+    reddit_id VARCHAR(20) UNIQUE NOT NULL, -- Full Reddit ID (t3_xxxxx)
+    author_id VARCHAR(10) REFERENCES redditors(id) ON DELETE SET NULL,
+    subreddit_id VARCHAR(10) REFERENCES subreddits(id) ON DELETE CASCADE,
+
+    -- Content
+    title TEXT NOT NULL,
+    selftext TEXT,
+    selftext_html TEXT,
+    url TEXT,
+    domain VARCHAR(255),
+
+    -- Metrics
+    score INTEGER DEFAULT 0,
+    upvote_ratio NUMERIC(3,2),
+    ups INTEGER DEFAULT 0,
+    downs INTEGER DEFAULT 0,
+    num_comments INTEGER DEFAULT 0,
+    num_crossposts INTEGER DEFAULT 0,
+    num_reports INTEGER,
+    view_count INTEGER,
+
+    -- Timestamps
+    created_utc TIMESTAMP NOT NULL,
+    edited_utc TIMESTAMP,
+
+    -- URLs and links
+    permalink TEXT,
+    shortlink TEXT,
+
+    -- Status flags
+    is_self BOOLEAN DEFAULT FALSE,
+    is_video BOOLEAN DEFAULT FALSE,
+    is_original_content BOOLEAN DEFAULT FALSE,
+    is_reddit_media_domain BOOLEAN DEFAULT FALSE,
+    is_meta BOOLEAN DEFAULT FALSE,
+    is_crosspostable BOOLEAN DEFAULT TRUE,
+
+    -- Moderation status
+    over_18 BOOLEAN DEFAULT FALSE,
+    spoiler BOOLEAN DEFAULT FALSE,
+    stickied BOOLEAN DEFAULT FALSE,
+    locked BOOLEAN DEFAULT FALSE,
+    removed BOOLEAN DEFAULT FALSE,
+    approved BOOLEAN DEFAULT FALSE,
+    hidden BOOLEAN DEFAULT FALSE,
+    archived BOOLEAN DEFAULT FALSE,
+    quarantine BOOLEAN DEFAULT FALSE,
+
+    -- Awards and recognition
+    gilded INTEGER DEFAULT 0,
+    total_awards_received INTEGER DEFAULT 0,
+    all_awardings JSONB,
+
+    -- Flair
+    link_flair_text TEXT,
+    link_flair_css_class VARCHAR(100),
+    link_flair_background_color VARCHAR(7),
+    link_flair_text_color VARCHAR(10),
+    link_flair_template_id VARCHAR(50),
+    author_flair_text TEXT,
+    author_flair_css_class VARCHAR(100),
+
+    -- Special attributes
+    distinguished VARCHAR(20), -- moderator, admin, special
+    suggested_sort VARCHAR(20), -- confidence, top, new, controversial, old, random, qa, live
+    contest_mode BOOLEAN DEFAULT FALSE,
+
+    -- Crosspost info
+    is_crosspost BOOLEAN DEFAULT FALSE,
+    crosspost_parent VARCHAR(10),
+
+    -- Store additional dynamic attributes
+    extra_attributes JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Comments
+CREATE TABLE IF NOT EXISTS comments (
+    id VARCHAR(10) PRIMARY KEY,
+    reddit_id VARCHAR(20) UNIQUE NOT NULL, -- Full Reddit ID (t1_xxxxx)
+    author_id VARCHAR(10) REFERENCES redditors(id) ON DELETE SET NULL,
+    submission_id VARCHAR(10) REFERENCES submissions(id) ON DELETE CASCADE,
+    parent_id VARCHAR(10), -- Can reference another comment or the submission
+    link_id VARCHAR(20), -- The submission this comment belongs to (t3_xxxxx format)
+
+    -- Content
+    body TEXT NOT NULL,
+    body_html TEXT,
+
+    -- Metrics
+    score INTEGER DEFAULT 0,
+    ups INTEGER DEFAULT 0,
+    downs INTEGER DEFAULT 0,
+    controversiality INTEGER DEFAULT 0,
+
+    -- Timestamps
+    created_utc TIMESTAMP NOT NULL,
+    edited_utc TIMESTAMP,
+
+    -- Hierarchy
+    is_root BOOLEAN DEFAULT FALSE,
+    depth INTEGER DEFAULT 0,
+
+    -- Status flags
+    is_submitter BOOLEAN DEFAULT FALSE,
+    score_hidden BOOLEAN DEFAULT FALSE,
+
+    -- Moderation status
+    stickied BOOLEAN DEFAULT FALSE,
+    distinguished VARCHAR(20), -- moderator, admin, special
+    locked BOOLEAN DEFAULT FALSE,
+    removed BOOLEAN DEFAULT FALSE,
+    approved BOOLEAN DEFAULT FALSE,
+    collapsed BOOLEAN DEFAULT FALSE,
+    collapsed_reason VARCHAR(50),
+
+    -- Awards
+    gilded INTEGER DEFAULT 0,
+    total_awards_received INTEGER DEFAULT 0,
+    all_awardings JSONB,
+
+    -- Author flair
+    author_flair_text TEXT,
+    author_flair_css_class VARCHAR(100),
+
+    -- URLs
+    permalink TEXT,
+
+    -- Store additional dynamic attributes
+    extra_attributes JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =====================================================
+-- RELATIONSHIP TABLES
+-- =====================================================
+
+-- User-Subreddit Relationships
+CREATE TABLE IF NOT EXISTS user_subreddit_relationships (
+    user_id VARCHAR(10) REFERENCES redditors(id) ON DELETE CASCADE,
+    subreddit_id VARCHAR(10) REFERENCES subreddits(id) ON DELETE CASCADE,
+    relationship_type VARCHAR(20) NOT NULL, -- subscriber, moderator, contributor, banned, muted
+    permissions JSONB, -- For moderator permissions
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP, -- For temporary bans/mutes
+    PRIMARY KEY (user_id, subreddit_id, relationship_type)
+);
+
+-- Votes (Optional - high volume table)
+CREATE TABLE IF NOT EXISTS votes (
+    user_id VARCHAR(10) REFERENCES redditors(id) ON DELETE CASCADE,
+    target_type VARCHAR(10) NOT NULL, -- submission, comment
+    target_id VARCHAR(10) NOT NULL,
+    vote_type SMALLINT NOT NULL, -- 1 for upvote, -1 for downvote, 0 for no vote
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, target_type, target_id)
+);
+
+-- =====================================================
+-- SUPPORTING TABLES
+-- =====================================================
+
+-- Awards Given
+CREATE TABLE IF NOT EXISTS awards (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    giver_id VARCHAR(10) REFERENCES redditors(id) ON DELETE SET NULL,
+    target_type VARCHAR(10) NOT NULL, -- submission, comment
+    target_id VARCHAR(10) NOT NULL,
+    award_type VARCHAR(50) NOT NULL,
+    award_sub_type VARCHAR(50),
+    coin_price INTEGER,
+    coin_reward INTEGER,
+    days_of_premium INTEGER,
+    description TEXT,
+    icon_url TEXT,
+    static_icon_url TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Flairs
+CREATE TABLE IF NOT EXISTS flairs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    subreddit_id VARCHAR(10) REFERENCES subreddits(id) ON DELETE CASCADE,
+    flair_type VARCHAR(20) NOT NULL, -- link, user
+    flair_text TEXT,
+    flair_text_editable BOOLEAN DEFAULT FALSE,
+    flair_template_id VARCHAR(50),
+    flair_css_class VARCHAR(100),
+    background_color VARCHAR(7),
+    text_color VARCHAR(10),
+    mod_only BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Media Attachments
+CREATE TABLE IF NOT EXISTS media_attachments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    submission_id VARCHAR(10) REFERENCES submissions(id) ON DELETE CASCADE,
+    media_type VARCHAR(20) NOT NULL, -- image, video, gif, gallery
+    url TEXT NOT NULL,
+    thumbnail_url TEXT,
+    preview_url TEXT,
+    width INTEGER,
+    height INTEGER,
+    duration INTEGER, -- For videos, in seconds
+    file_size INTEGER,
+    media_metadata JSONB, -- Store provider-specific metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Modmail Messages (if tracking modmail)
+CREATE TABLE IF NOT EXISTS modmail_messages (
+    id VARCHAR(50) PRIMARY KEY,
+    conversation_id VARCHAR(50),
+    subreddit_id VARCHAR(10) REFERENCES subreddits(id) ON DELETE CASCADE,
+    author_id VARCHAR(10) REFERENCES redditors(id) ON DELETE SET NULL,
+    subject TEXT,
+    body TEXT,
+    body_html TEXT,
+    is_internal BOOLEAN DEFAULT FALSE,
+    created_utc TIMESTAMP NOT NULL,
+    extra_attributes JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Trophies
+CREATE TABLE IF NOT EXISTS trophies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(10) REFERENCES redditors(id) ON DELETE CASCADE,
+    trophy_id VARCHAR(50),
+    name VARCHAR(100),
+    description TEXT,
+    icon_40 TEXT,
+    icon_70 TEXT,
+    awarded_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- API Fetch History (for tracking data collection)
+CREATE TABLE IF NOT EXISTS fetch_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    entity_type VARCHAR(20) NOT NULL, -- submission, comment, subreddit, redditor
+    entity_id VARCHAR(20) NOT NULL,
+    endpoint VARCHAR(255),
+    status_code INTEGER,
+    response_size INTEGER,
+    error_message TEXT,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processing_time_ms INTEGER
+);
+
+-- =====================================================
+-- INDEXES
+-- =====================================================
+
+-- Redditors indexes
+CREATE INDEX idx_redditors_name ON redditors(name);
+CREATE INDEX idx_redditors_created_utc ON redditors(created_utc);
+CREATE INDEX idx_redditors_karma ON redditors(total_karma DESC);
+
+-- Subreddits indexes
+CREATE INDEX idx_subreddits_display_name ON subreddits(display_name);
+CREATE INDEX idx_subreddits_subscribers ON subreddits(subscribers DESC);
+CREATE INDEX idx_subreddits_created_utc ON subreddits(created_utc);
+
+-- Submissions indexes
+CREATE INDEX idx_submissions_author ON submissions(author_id);
+CREATE INDEX idx_submissions_subreddit ON submissions(subreddit_id);
+CREATE INDEX idx_submissions_created_utc ON submissions(created_utc DESC);
+CREATE INDEX idx_submissions_score ON submissions(score DESC);
+CREATE INDEX idx_submissions_num_comments ON submissions(num_comments DESC);
+CREATE INDEX idx_submissions_reddit_id ON submissions(reddit_id);
+
+-- Comments indexes
+CREATE INDEX idx_comments_author ON comments(author_id);
+CREATE INDEX idx_comments_submission ON comments(submission_id);
+CREATE INDEX idx_comments_parent ON comments(parent_id);
+CREATE INDEX idx_comments_created_utc ON comments(created_utc DESC);
+CREATE INDEX idx_comments_score ON comments(score DESC);
+CREATE INDEX idx_comments_reddit_id ON comments(reddit_id);
+
+-- Relationship indexes
+CREATE INDEX idx_user_subreddit_user ON user_subreddit_relationships(user_id);
+CREATE INDEX idx_user_subreddit_subreddit ON user_subreddit_relationships(subreddit_id);
+CREATE INDEX idx_user_subreddit_type ON user_subreddit_relationships(relationship_type);
+
+-- Votes indexes (if using)
+CREATE INDEX idx_votes_user ON votes(user_id);
+CREATE INDEX idx_votes_target ON votes(target_type, target_id);
+
+-- Fetch history indexes
+CREATE INDEX idx_fetch_history_entity ON fetch_history(entity_type, entity_id);
+CREATE INDEX idx_fetch_history_fetched_at ON fetch_history(fetched_at DESC);
+
+-- Full text search indexes
+CREATE INDEX idx_submissions_title_search ON submissions USING gin(to_tsvector('english', title));
+CREATE INDEX idx_submissions_selftext_search ON submissions USING gin(to_tsvector('english', selftext));
+CREATE INDEX idx_comments_body_search ON comments USING gin(to_tsvector('english', body));
+
+-- =====================================================
+-- FUNCTIONS AND TRIGGERS
+-- =====================================================
+
+-- Auto-update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply update trigger to main tables
+CREATE TRIGGER update_redditors_updated_at BEFORE UPDATE ON redditors
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_subreddits_updated_at BEFORE UPDATE ON subreddits
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_submissions_updated_at BEFORE UPDATE ON submissions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON comments
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- VIEWS
+-- =====================================================
+
+-- Active submissions view
+CREATE VIEW active_submissions AS
+SELECT
+    s.*,
+    r.name as author_name,
+    sub.display_name as subreddit_name
+FROM submissions s
+LEFT JOIN redditors r ON s.author_id = r.id
+LEFT JOIN subreddits sub ON s.subreddit_id = sub.id
+WHERE s.removed = FALSE
+    AND s.archived = FALSE
+    AND s.created_utc > NOW() - INTERVAL '30 days';
+
+-- Top comments view
+CREATE VIEW top_comments AS
+SELECT
+    c.*,
+    r.name as author_name,
+    s.title as submission_title
+FROM comments c
+LEFT JOIN redditors r ON c.author_id = r.id
+LEFT JOIN submissions s ON c.submission_id = s.id
+WHERE c.removed = FALSE
+    AND c.score > 10
+ORDER BY c.score DESC;
+
+-- Subreddit statistics view
+CREATE MATERIALIZED VIEW subreddit_stats AS
+SELECT
+    s.id,
+    s.display_name,
+    s.subscribers,
+    COUNT(DISTINCT sub.id) as submission_count,
+    COUNT(DISTINCT c.id) as comment_count,
+    AVG(sub.score) as avg_submission_score,
+    AVG(c.score) as avg_comment_score,
+    MAX(sub.created_utc) as last_submission_time,
+    MAX(c.created_utc) as last_comment_time
+FROM subreddits s
+LEFT JOIN submissions sub ON s.id = sub.subreddit_id
+LEFT JOIN comments c ON sub.id = c.submission_id
+GROUP BY s.id, s.display_name, s.subscribers;
+
+-- Create refresh function for materialized view
+CREATE OR REPLACE FUNCTION refresh_subreddit_stats()
+RETURNS void AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY subreddit_stats;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
+-- PARTITIONING (Optional - for very large datasets)
+-- =====================================================
+
+-- Example: Partition comments by month
+-- Uncomment and modify as needed for your use case
+
+-- CREATE TABLE comments_2024_01 PARTITION OF comments
+--     FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+--
+-- CREATE TABLE comments_2024_02 PARTITION OF comments
+--     FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
+
+-- =====================================================
+-- PERMISSIONS (Adjust as needed)
+-- =====================================================
+
+-- Example permissions for a read-only user
+-- CREATE ROLE reddit_reader;
+-- GRANT USAGE ON SCHEMA reddit TO reddit_reader;
+-- GRANT SELECT ON ALL TABLES IN SCHEMA reddit TO reddit_reader;
+
+-- Example permissions for an application user
+-- CREATE ROLE reddit_app;
+-- GRANT USAGE ON SCHEMA reddit TO reddit_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA reddit TO reddit_app;
+-- GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA reddit TO reddit_app;
+
+-- =====================================================
+-- MAINTENANCE QUERIES
+-- =====================================================
+
+-- Query to identify missing indexes
+COMMENT ON SCHEMA reddit IS 'Reddit data schema for PRAW data collection and analysis';
+
+-- Sample maintenance query to clean old fetch history
+-- DELETE FROM fetch_history WHERE fetched_at < NOW() - INTERVAL '90 days';
+
+-- Sample query to update statistics
+-- ANALYZE reddit.submissions;
+-- ANALYZE reddit.comments;
+-- ANALYZE reddit.redditors;
+-- ANALYZE reddit.subreddits;
