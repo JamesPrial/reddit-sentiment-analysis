@@ -321,7 +321,7 @@ class CommentFetcher:
                 CommentField.CONTROVERSIALITY: getattr(comment, CommentField.CONTROVERSIALITY.value, 0),
                 CommentField.DEPTH: depth,
                 CommentField.PERMALINK: f"https://reddit.com{comment.permalink}",
-                CommentField.RETRIEVED_AT: datetime.utcnow(),
+                CommentField.RETRIEVED_AT: datetime.now(),
                 CommentField.IS_DELETED: self._is_deleted(comment),
                 CommentField.IS_REMOVED: self._is_removed(comment)
             }
