@@ -210,7 +210,7 @@ class CommentFetcher:
 
             if comment_data:
                 # Recursively process replies
-                if hasattr(comment, 'replies') and comment.replies:
+                if hasattr(comment, CommentField.REPLIES.value) and comment.replies:
                     comment_data[CommentField.REPLIES] = self._extract_comments_tree(
                         comment.replies,
                         submission_id=submission_id,
@@ -262,7 +262,7 @@ class CommentFetcher:
                 yield comment_data
 
                 # Recursively process replies
-                if hasattr(comment, 'replies') and comment.replies:
+                if hasattr(comment, CommentField.REPLIES.value) and comment.replies:
                     yield from self._stream_comments(
                         comment.replies,
                         submission_id=submission_id,
@@ -290,12 +290,14 @@ class CommentFetcher:
         """
         try:
             # Get parent ID from comment if not provided
-            if parent_id is None and hasattr(comment, 'parent_id'):
+            if parent_id is None and hasattr(comment, CommentField.PARENT_ID.value):
                 parent_id = comment.parent_id
                 if parent_id and parent_id.startswith(RedditObjectPrefix.SUBMISSION.value):
                     parent_id = None  # Top-level comment
                 elif parent_id and parent_id.startswith(RedditObjectPrefix.COMMENT.value):
                     parent_id = parent_id[len(RedditObjectPrefix.COMMENT.value):]  # Remove prefix
+
+            collapsed_reason_value = getattr(comment, CommentField.COLLAPSED_REASON.value, None)
 
             return {
                 CommentField.ID: comment.id,
@@ -304,7 +306,7 @@ class CommentFetcher:
                 CommentField.AUTHOR: comment.author.name if comment.author else CommentBodyStatus.DELETED.value,
                 CommentField.AUTHOR_ID: comment.author.id if comment.author else None,
                 CommentField.BODY: comment.body,
-                CommentField.BODY_HTML: getattr(comment, 'body_html', None),
+                CommentField.BODY_HTML: getattr(comment, CommentField.BODY_HTML.value, None),
                 CommentField.SCORE: comment.score,
                 CommentField.UPS: comment.ups,
                 CommentField.DOWNS: comment.downs,
@@ -314,9 +316,9 @@ class CommentFetcher:
                 CommentField.DISTINGUISHED: DistinguishedStatus(comment.distinguished) if comment.distinguished else DistinguishedStatus.NONE,
                 CommentField.STICKIED: comment.stickied,
                 CommentField.GILDED: comment.gilded,
-                CommentField.COLLAPSED: getattr(comment, 'collapsed', False),
-                CommentField.COLLAPSED_REASON: CollapsedReason(getattr(comment, 'collapsed_reason', None)) if getattr(comment, 'collapsed_reason', None) else CollapsedReason.NONE,
-                CommentField.CONTROVERSIALITY: getattr(comment, 'controversiality', 0),
+                CommentField.COLLAPSED: getattr(comment, CommentField.COLLAPSED.value, False),
+                CommentField.COLLAPSED_REASON: CollapsedReason(collapsed_reason_value) if collapsed_reason_value else CollapsedReason.NONE,
+                CommentField.CONTROVERSIALITY: getattr(comment, CommentField.CONTROVERSIALITY.value, 0),
                 CommentField.DEPTH: depth,
                 CommentField.PERMALINK: f"https://reddit.com{comment.permalink}",
                 CommentField.RETRIEVED_AT: datetime.utcnow(),
